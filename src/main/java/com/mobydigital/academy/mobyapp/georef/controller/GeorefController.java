@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.mobydigital.academy.mobyapp.georef.service.GeorefService;
 
 @RestController
-@RequestMapping("/locations")
+@RequestMapping("/api/locations")
 public class GeorefController {
 
     @Autowired
