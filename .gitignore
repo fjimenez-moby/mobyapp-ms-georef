@@ -32,8 +32,6 @@ build/
 ### VS Code ###
 .vscode/
 
-# Carpetas de compilación
-bin/
 # Properties
 **/.env
 !**/.env.example
