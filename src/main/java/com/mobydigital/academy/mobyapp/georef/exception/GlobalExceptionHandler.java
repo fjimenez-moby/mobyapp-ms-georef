@@ -17,23 +17,20 @@ public class GlobalExceptionHandler {
     @Value("${REDIRECT_URI}")
     private String redirectUri;
 
-    // TODO: Mejorar manejo, menos genérico.
-    // TODO: Crear excepciones personalizadas.
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<Void> handleException(Exception ex) {
+    @ExceptionHandler(LocalityNotFoundException.class)
+    public ResponseEntity<Void> handleLocalityNotFoundException(LocalityNotFoundException ex) {
         logger.error(ex.getMessage());
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION,redirectUri + "/error&type=server_error")
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .header(HttpHeaders.LOCATION,redirectUri + "/error&type=client_error")
                 .build();
     }
 
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<Void> handleRuntimeException(RuntimeException ex) {
+    @ExceptionHandler(ProvinceNotFoundException.class)
+    public ResponseEntity<Void> handleProvinceNotFoundException(ProvinceNotFoundException ex) {
         logger.error(ex.getMessage());
-        return ResponseEntity.status(HttpStatus.FOUND)
-                .header(HttpHeaders.LOCATION,redirectUri + "/error&type=server_error")
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .header(HttpHeaders.LOCATION,redirectUri + "/error&type=client_error")
                 .build();
     }
-
 
 }
