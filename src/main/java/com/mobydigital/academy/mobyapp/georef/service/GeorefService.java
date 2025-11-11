@@ -2,8 +2,10 @@ package com.mobydigital.academy.mobyapp.georef.service;
 
 import java.util.List;
 
+import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import com.mobydigital.academy.mobyapp.georef.model.Locality;
 import com.mobydigital.academy.mobyapp.georef.model.LocalityResponse;
@@ -14,17 +16,14 @@ import com.mobydigital.academy.mobyapp.georef.model.ProvinceResponse;
 @Service
 public class GeorefService {
 
-    //TODO: Salió la nueva versión de la API de Georef (v2). La vieja la pueden tirar. Ojo.
-    // Nueva API: https://apis.datos.gob.ar/georef/api/v2.0
-
-    @Autowired
     private RestTemplate restTemplate;
 
     private String apiURL;
 
-    public GeorefService() {
-        this.restTemplate = new RestTemplate();
-        this.apiURL = "https://apis.datos.gob.ar/georef/api/v2.0";
+    @Autowired
+    public GeorefService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+        this.apiURL = "https://apis.datos.gob.ar/georef/api/v2.0"; // Nueva versión de la API
     }
 
     public List<String> getProvinces() {
@@ -45,10 +44,17 @@ public class GeorefService {
                 .toList();
     }
 
-    public String getProvinceById(Long provinceId) {
+    public String getProvinceById(Long provinceId) throws ProvinceNotFoundException {
         String url = apiURL + "/provincias?id=" + provinceId;
-        ProvinceResponse response =  restTemplate.getForObject(url, ProvinceResponse.class);
-        return response.getProvinces().get(0).getName();
+
+        List<Province> provinces = restTemplate
+                .getForObject(url, ProvinceResponse.class)
+                .getProvinces();
+
+        if(provinces.size() == 0)
+            throw new ProvinceNotFoundException(provinceId);
+
+        return provinces.get(0).getName(); // ayuda juli :c
     }
 
     // Buscar localidades por nombre de provincia
