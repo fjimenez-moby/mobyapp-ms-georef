@@ -2,6 +2,8 @@ package com.mobydigital.academy.mobyapp.georef.controller;
 
 import java.util.List;
 
+import com.mobydigital.academy.mobyapp.georef.exception.LocalityNotFoundException;
+import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -15,8 +17,13 @@ import com.mobydigital.academy.mobyapp.georef.service.GeorefService;
 @RequestMapping("/api/locations")
 public class GeorefController {
 
-    @Autowired
+
     private GeorefService georefService;
+
+    @Autowired
+    public GeorefController(GeorefService georefService) {
+        this.georefService = georefService;
+    }
 
     // Hace falta el ID?
     @GetMapping("/provinces")
@@ -25,22 +32,22 @@ public class GeorefController {
     }
 
     @GetMapping("/provinces/{id}")
-    public ResponseEntity<String> getProvinceById(@PathVariable("id") Long provinceId) {
+    public ResponseEntity<String> getProvinceById(@PathVariable("id") Long provinceId) throws ProvinceNotFoundException {
         return new ResponseEntity<>(georefService.getProvinceById(provinceId), HttpStatus.OK);
     }
 
     @GetMapping("/provinces/id/{id}/localities")
-    public ResponseEntity<List<String>> getLocalitiesByIdProvince(@PathVariable("id") Long provinceId) {
+    public ResponseEntity<List<String>> getLocalitiesByIdProvince(@PathVariable("id") Long provinceId) throws  ProvinceNotFoundException {
         return new ResponseEntity<>(georefService.getLocalitiesByIdProvince(provinceId), HttpStatus.OK);
     }
 
     @GetMapping("/provinces/name/{name}/localities")
-    public ResponseEntity<List<String>> getLocalitiesByProvinceName(@PathVariable("name") String provinceName) {
+    public ResponseEntity<List<String>> getLocalitiesByProvinceName(@PathVariable("name") String provinceName) throws ProvinceNotFoundException {
         return new ResponseEntity<>(georefService.getLocalitiesByProvinceName(provinceName), HttpStatus.OK);
     }
 
     @GetMapping("/localities/{id}")
-    public ResponseEntity<String> getLocalityById(@PathVariable("id") Long localityId) {
+    public ResponseEntity<String> getLocalityById(@PathVariable("id") Long localityId) throws LocalityNotFoundException {
         return new ResponseEntity<>(georefService.getLocalityById(localityId), HttpStatus.OK);
     }
 
