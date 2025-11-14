@@ -1,10 +1,12 @@
 package com.mobydigital.academy.mobyapp.georef.service;
 
 import java.util.List;
+import java.util.Objects;
 
 import com.mobydigital.academy.mobyapp.georef.exception.LocalityNotFoundException;
 import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import com.mobydigital.academy.mobyapp.georef.model.Locality;
@@ -38,7 +40,7 @@ public class GeorefService {
         String url = apiURL + "/localidades?provincia=" + provinceId + "&max=5000&orden=nombre";
         LocalityResponse response =  restTemplate.getForObject(url, LocalityResponse.class);
 
-        if(response.getLocalities().size() == 0){
+        if(response.getLocalities().isEmpty()){
             throw new ProvinceNotFoundException();
         }
 
@@ -52,11 +54,11 @@ public class GeorefService {
     public String getProvinceById(Long provinceId) throws ProvinceNotFoundException {
         String url = apiURL + "/provincias?id=" + provinceId;
 
-        List<Province> provinces = restTemplate
-                .getForObject(url, ProvinceResponse.class)
+        List<Province> provinces = Objects.requireNonNull(restTemplate
+                        .getForObject(url, ProvinceResponse.class))
                 .getProvinces();
 
-        if(provinces.size() == 0)
+        if(provinces.isEmpty())
             throw new ProvinceNotFoundException();
 
         return provinces.get(0).getName();
@@ -65,12 +67,12 @@ public class GeorefService {
     public List<String> getLocalitiesByProvinceName(String provinceName) throws ProvinceNotFoundException {
         List<String> provinceList = getProvinces();
 
-        if(provinceName == null || provinceName.trim().equals("") || !(provinceList.contains(provinceName))){
+        if(provinceName == null || provinceName.trim().isEmpty() || !(provinceList.contains(provinceName))){
             throw new ProvinceNotFoundException();
         }
 
         String url = apiURL + "/localidades?provincia=" + provinceName + "&orden=nombre&max=5000";
-        List<Locality> localities = restTemplate.getForObject(url, LocalityResponse.class).getLocalities();
+        List<Locality> localities = Objects.requireNonNull(restTemplate.getForObject(url, LocalityResponse.class)).getLocalities();
 
         return localities.stream()
                 .map(Locality::getName)
@@ -78,12 +80,26 @@ public class GeorefService {
     }
 
     public String getLocalityById(Long localityId) throws LocalityNotFoundException {
-        String url = apiURL + "/localidades?id=" + localityId;
-        LocalityResponse response =  restTemplate.getForObject(url, LocalityResponse.class);
 
-        if(response.getLocalities().size() == 0){
+        String url = apiURL + "/localidades?id=" + localityId;
+
+        ResponseEntity<LocalityResponse> responseEntity =
+                restTemplate.getForEntity(url, LocalityResponse.class);
+
+        // Si la API devolvió 4xx, lo tomamos como "no encontrada" o inválida
+        if (responseEntity.getStatusCode().is4xxClientError()) {
             throw new LocalityNotFoundException();
         }
-        return response.getLocalities().get(0).getName();
+
+        LocalityResponse body = responseEntity.getBody();
+
+        if (body == null ||
+                body.getLocalities() == null ||
+                body.getLocalities().isEmpty()) {
+
+            throw new LocalityNotFoundException();
+        }
+
+        return body.getLocalities().get(0).getName();
     }
 }
