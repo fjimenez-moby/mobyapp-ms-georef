@@ -1,5 +1,7 @@
-package com.mobydigital.academy.mobyapp.georef.exception;
+package com.mobydigital.academy.mobyapp.georef.exception.handler;
 
+import com.mobydigital.academy.mobyapp.georef.exception.LocalityNotFoundException;
+import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundException;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -12,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.client.RestClientException;
 
 @ControllerAdvice
 public class GlobalExceptionHandler {
@@ -50,6 +53,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .header(HttpHeaders.LOCATION, redirectUri + "/error&type=client_error")
                 .body(ex.getMessage());
+    }
+
+    @ExceptionHandler(RestClientException.class)
+    public ResponseEntity<String> handleRestClientException(RestClientException ex) {
+        logger.error(ex.getMessage());
+        return new ResponseEntity<>(ex.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
 }

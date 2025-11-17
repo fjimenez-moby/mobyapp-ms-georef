@@ -8,6 +8,7 @@ import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundExceptio
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 import com.mobydigital.academy.mobyapp.georef.model.Locality;
 import com.mobydigital.academy.mobyapp.georef.model.LocalityResponse;
@@ -17,9 +18,9 @@ import com.mobydigital.academy.mobyapp.georef.model.ProvinceResponse;
 @Service
 public class GeorefService {
 
-    private RestTemplate restTemplate;
+    private final RestTemplate restTemplate;
 
-    private String apiURL;
+    private final String apiURL;
 
     @Autowired
     public GeorefService(RestTemplate restTemplate) {
@@ -30,17 +31,22 @@ public class GeorefService {
     public List<String> getProvinces() {
         String url = apiURL + "/provincias?orden=nombre";
         ProvinceResponse response = restTemplate.getForObject(url, ProvinceResponse.class);
-        List<Province> provinces = response.getProvinces();
-        return provinces.stream()
-                .map(Province::getName)
-                .toList();
+        if (response != null) {
+            List<Province> provinces = response.getProvinces();
+            return provinces.stream()
+                    .map(Province::getName)
+                    .toList();
+        }
+
+        throw new RestClientException("Hubo un fallo en la petición REST a la API Georef.");
+
     }
 
     public List<String> getLocalitiesByIdProvince(Long provinceId) throws ProvinceNotFoundException {
         String url = apiURL + "/localidades?provincia=" + provinceId + "&max=5000&orden=nombre";
         LocalityResponse response =  restTemplate.getForObject(url, LocalityResponse.class);
 
-        if(response.getLocalities().isEmpty()){
+        if(response == null || response.getLocalities().isEmpty()){
             throw new ProvinceNotFoundException();
         }
 
