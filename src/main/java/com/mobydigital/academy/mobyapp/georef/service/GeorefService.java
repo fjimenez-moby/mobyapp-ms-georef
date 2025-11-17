@@ -5,8 +5,14 @@ import java.util.Objects;
 
 import com.mobydigital.academy.mobyapp.georef.exception.LocalityNotFoundException;
 import com.mobydigital.academy.mobyapp.georef.exception.ProvinceNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
@@ -18,17 +24,40 @@ import com.mobydigital.academy.mobyapp.georef.model.ProvinceResponse;
 @Service
 public class GeorefService {
 
+    private static final Logger logger = LoggerFactory.getLogger(GeorefService.class);
+
     private final RestTemplate restTemplate;
 
-    private final String apiURL;
+    @Value("${georef.api.primary.url}")
+    private String primaryApiURL;
+
+    @Value("${georef.api.fallback.url}")
+    private String fallbackApiURL;
+
+    @Value("${georef.api.max-results:5000}")
+    private int maxResults;
 
     @Autowired
     public GeorefService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
-        this.apiURL = "https://apis.datos.gob.ar/georef/api/v2.0"; // Nueva versión de la API
     }
 
+    @Retryable(
+            retryFor = {RestClientException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public List<String> getProvinces() {
+        return getProvincesFromApi(primaryApiURL);
+    }
+
+    @Recover
+    public List<String> recoverGetProvinces(RestClientException e) {
+        logger.warn("Primary API failed, using fallback API for getProvinces", e);
+        return getProvincesFromApi(fallbackApiURL);
+    }
+
+    private List<String> getProvincesFromApi(String apiURL) {
         String url = apiURL + "/provincias?orden=nombre";
         ProvinceResponse response = restTemplate.getForObject(url, ProvinceResponse.class);
         if (response != null) {
@@ -39,14 +68,28 @@ public class GeorefService {
         }
 
         throw new RestClientException("Hubo un fallo en la petición REST a la API Georef.");
-
     }
 
+    @Retryable(
+            retryFor = {RestClientException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public List<String> getLocalitiesByIdProvince(Long provinceId) throws ProvinceNotFoundException {
-        String url = apiURL + "/localidades?provincia=" + provinceId + "&max=5000&orden=nombre";
-        LocalityResponse response =  restTemplate.getForObject(url, LocalityResponse.class);
+        return getLocalitiesByIdProvinceFromApi(primaryApiURL, provinceId);
+    }
 
-        if(response == null || response.getLocalities().isEmpty()){
+    @Recover
+    public List<String> recoverGetLocalitiesByIdProvince(RestClientException e, Long provinceId) throws ProvinceNotFoundException {
+        logger.warn("Primary API failed, using fallback API for getLocalitiesByIdProvince", e);
+        return getLocalitiesByIdProvinceFromApi(fallbackApiURL, provinceId);
+    }
+
+    private List<String> getLocalitiesByIdProvinceFromApi(String apiURL, Long provinceId) throws ProvinceNotFoundException {
+        String url = apiURL + "/localidades?provincia=" + provinceId + "&max=" + maxResults + "&orden=nombre";
+        LocalityResponse response = restTemplate.getForObject(url, LocalityResponse.class);
+
+        if(response == null || response.getLocalities() == null || response.getLocalities().isEmpty()){
             throw new ProvinceNotFoundException();
         }
 
@@ -57,55 +100,92 @@ public class GeorefService {
                 .toList();
     }
 
+    @Retryable(
+            retryFor = {RestClientException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public String getProvinceById(Long provinceId) throws ProvinceNotFoundException {
-        String url = apiURL + "/provincias?id=" + provinceId;
-
-        List<Province> provinces = Objects.requireNonNull(restTemplate
-                        .getForObject(url, ProvinceResponse.class))
-                .getProvinces();
-
-        if(provinces.isEmpty())
-            throw new ProvinceNotFoundException();
-
-        return provinces.get(0).getName();
+        return getProvinceByIdFromApi(primaryApiURL, provinceId);
     }
 
-    public List<String> getLocalitiesByProvinceName(String provinceName) throws ProvinceNotFoundException {
-        List<String> provinceList = getProvinces();
+    @Recover
+    public String recoverGetProvinceById(RestClientException e, Long provinceId) throws ProvinceNotFoundException {
+        logger.warn("Primary API failed, using fallback API for getProvinceById", e);
+        return getProvinceByIdFromApi(fallbackApiURL, provinceId);
+    }
 
-        if(provinceName == null || provinceName.trim().isEmpty() || !(provinceList.contains(provinceName))){
+    private String getProvinceByIdFromApi(String apiURL, Long provinceId) throws ProvinceNotFoundException {
+        String url = apiURL + "/provincias?id=" + provinceId;
+
+        ProvinceResponse response = restTemplate.getForObject(url, ProvinceResponse.class);
+
+        if(response == null || response.getProvinces() == null || response.getProvinces().isEmpty()) {
             throw new ProvinceNotFoundException();
         }
 
-        String url = apiURL + "/localidades?provincia=" + provinceName + "&orden=nombre&max=5000";
-        List<Locality> localities = Objects.requireNonNull(restTemplate.getForObject(url, LocalityResponse.class)).getLocalities();
+        return response.getProvinces().get(0).getName();
+    }
 
-        return localities.stream()
+    @Retryable(
+            retryFor = {RestClientException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
+    public List<String> getLocalitiesByProvinceName(String provinceName) throws ProvinceNotFoundException {
+        return getLocalitiesByProvinceNameFromApi(primaryApiURL, provinceName);
+    }
+
+    @Recover
+    public List<String> recoverGetLocalitiesByProvinceName(RestClientException e, String provinceName) throws ProvinceNotFoundException {
+        logger.warn("Primary API failed, using fallback API for getLocalitiesByProvinceName", e);
+        return getLocalitiesByProvinceNameFromApi(fallbackApiURL, provinceName);
+    }
+
+    private List<String> getLocalitiesByProvinceNameFromApi(String apiURL, String provinceName) throws ProvinceNotFoundException {
+        if(provinceName == null || provinceName.trim().isEmpty()){
+            throw new ProvinceNotFoundException();
+        }
+
+        String url = apiURL + "/localidades?provincia=" + provinceName + "&orden=nombre&max=" + maxResults;
+        LocalityResponse response = restTemplate.getForObject(url, LocalityResponse.class);
+
+        if(response == null || response.getLocalities() == null || response.getLocalities().isEmpty()) {
+            throw new ProvinceNotFoundException();
+        }
+
+        return response.getLocalities().stream()
                 .map(Locality::getName)
                 .toList();
     }
 
+    @Retryable(
+            retryFor = {RestClientException.class},
+            maxAttempts = 3,
+            backoff = @Backoff(delay = 1000, multiplier = 2)
+    )
     public String getLocalityById(Long localityId) throws LocalityNotFoundException {
+        return getLocalityByIdFromApi(primaryApiURL, localityId);
+    }
 
+    @Recover
+    public String recoverGetLocalityById(RestClientException e, Long localityId) throws LocalityNotFoundException {
+        logger.warn("Primary API failed, using fallback API for getLocalityById", e);
+        return getLocalityByIdFromApi(fallbackApiURL, localityId);
+    }
+
+    private String getLocalityByIdFromApi(String apiURL, Long localityId) throws LocalityNotFoundException {
         String url = apiURL + "/localidades?id=" + localityId;
 
-        ResponseEntity<LocalityResponse> responseEntity =
-                restTemplate.getForEntity(url, LocalityResponse.class);
+        LocalityResponse response = restTemplate.getForObject(url, LocalityResponse.class);
 
-        // Si la API devolvió 4xx, lo tomamos como "no encontrada" o inválida
-        if (responseEntity.getStatusCode().is4xxClientError()) {
-            throw new LocalityNotFoundException();
-        }
-
-        LocalityResponse body = responseEntity.getBody();
-
-        if (body == null ||
-                body.getLocalities() == null ||
-                body.getLocalities().isEmpty()) {
+        if (response == null ||
+                response.getLocalities() == null ||
+                response.getLocalities().isEmpty()) {
 
             throw new LocalityNotFoundException();
         }
 
-        return body.getLocalities().get(0).getName();
+        return response.getLocalities().get(0).getName();
     }
 }
